@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>消息显示测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .message {
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .message-own {
+            background: #e3f2fd;
+            text-align: right;
+        }
+        .message-content {
+            margin: 5px 0;
+        }
+        .message-text {
+            background: #f0f0f0;
+            padding: 8px;
+            border-radius: 4px;
+            display: inline-block;
+        }
+        .message-own .message-text {
+            background: #2196f3;
+            color: white;
+        }
+        .message-info {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        button {
+            padding: 8px 16px;
+            margin: 5px;
+            cursor: pointer;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .log {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 3px;
+            margin: 10px 0;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+            border: 1px solid #dee2e6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>消息显示测试</h1>
+        
+        <div>
+            <button onclick="addTestMessage()">添加测试消息</button>
+            <button onclick="clearMessages()">清空消息</button>
+        </div>
+        
+        <div id="messages"></div>
+        
+        <div class="log" id="log"></div>
+    </div>
+
+    <script>
+        let messages = [];
+
+        function log(message) {
+            const logElement = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.innerHTML += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        function addTestMessage() {
+            const testMessages = [
+                {
+                    id: Date.now(),
+                    senderId: 1,
+                    senderName: "用户1",
+                    content: "这是一条测试消息",
+                    type: "chat",
+                    fileUrl: "",
+                    timestamp: new Date().toISOString()
+                },
+                {
+                    id: Date.now() + 1,
+                    senderId: 2,
+                    senderName: "用户2",
+                    content: "这是另一条测试消息",
+                    type: "text",
+                    fileUrl: "",
+                    timestamp: new Date().toISOString()
+                },
+                {
+                    id: Date.now() + 2,
+                    senderId: 1,
+                    senderName: "用户1",
+                    content: "消息内容为空",
+                    type: "chat",
+                    fileUrl: "",
+                    timestamp: new Date().toISOString()
+                }
+            ];
+
+            testMessages.forEach(msg => {
+                messages.push(msg);
+                log(`添加消息: ${JSON.stringify(msg)}`);
+            });
+
+            renderMessages();
+        }
+
+        function clearMessages() {
+            messages = [];
+            log("清空所有消息");
+            renderMessages();
+        }
+
+        function renderMessages() {
+            const container = document.getElementById('messages');
+            container.innerHTML = '';
+
+            messages.forEach(msg => {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${msg.senderId === 1 ? 'message-own' : ''}`;
+                
+                const isOwn = msg.senderId === 1;
+                
+                messageDiv.innerHTML = `
+                    <div class="message-info">
+                        ${msg.senderName} - ${new Date(msg.timestamp).toLocaleTimeString()}
+                    </div>
+                    <div class="message-content">
+                        <div class="message-text">
+                            ${msg.content || '(空内容)'}
+                        </div>
+                    </div>
+                    <div style="font-size: 10px; color: #999;">
+                        类型: ${msg.type}, ID: ${msg.id}
+                    </div>
+                `;
+                
+                container.appendChild(messageDiv);
+            });
+
+            log(`渲染了 ${messages.length} 条消息`);
+        }
+
+        // 页面加载时的提示
+        log('消息显示测试页面已加载');
+        log('点击"添加测试消息"按钮来测试消息显示');
+    </script>
+</body>
+</html> 

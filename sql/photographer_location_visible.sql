@@ -1,0 +1,1 @@
+ALTER TABLE photographer ADD COLUMN location_visible TINYINT(1) DEFAULT 1 COMMENT '位置是否公开（1公开，0隐藏）'; 

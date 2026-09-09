@@ -1,0 +1,163 @@
+spring:
+  profiles:
+    # 默认使用生产配置（打包部署到 154.221.23.105 直接生效）
+    # 本地开发请在 IDEA 运行配置的 Active profiles 填 local
+    active: local
+  application:
+    name: PhotoBooker
+  cloud:
+    sentinel:
+      enabled: false # 项目未使用 Sentinel 限流，关闭避免启动报错
+      transport:
+        # Sentinel 控制台地址，这里假设 Sentinel 控制台运行在本地 8090 端口
+        dashboard: localhost:8090
+        # 应用与 Sentinel 控制台交互的端口，会在该端口启动一个 HttpServer
+        port: 8719
+      http-method-specify: true # 开启请求方式前缀
+    # password: yourpassword # 如有密码请取消注释
+  mvc:
+    pathmatch:
+      matching-strategy: ant_path_matcher
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${DB_URL:jdbc:mysql://localhost:3306/photo?allowPublicKeyRetrieval=true&useSSL=false}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
+    druid:
+      max-active: 10
+  wechat:
+     appid: ${WECHAT_APPID:}
+     secret: ${WECHAT_SECRET:}
+    #配置redis连接信息
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+  data:
+    redis:
+      host: ${REDIS_HOST:192.168.100.129} #redis服务
+      port: ${REDIS_PORT:6379} #端口
+      password: ${REDIS_PASSWORD:} #密码
+      connect-timeout: 60000 #连接超时单位ms
+      lettuce:
+        pool: #连接池信息
+          max-active: 512 #最大连接数
+          max-idle: 128 #最大空闲连接数
+          min-idle: 128 #最小空闲连接数
+          max-wait: 1000ms #最大连接等待时间
+      database: 0
+  ai:
+    openai:
+      api-key: ${AI_API_KEY:} # DeepSeek API Key
+      base-url: ${AI_BASE_URL:https://api.deepseek.com}
+      chat:
+        options:
+          model: deepseek-v4-flash
+          temperature: 0.3
+    # AI 数据库访问配置
+    database:
+      enabled: true  # 启用数据库查询
+      default-limit: 20  # 默认查询限制
+      enable-fuzzy-match: true  # 启用模糊匹配
+      # 允许访问的表及字段
+      allowed-tables:
+        admin: [id, username, realName, phone, role]
+        photographer: [id, name, phone, style, intro, workYears, avatar, rating, orderCount, location]
+        portfolio: [id, photographerId, title, description, category, tags, coverImage, viewCount, likeCount]
+        photographer_package: [id, name, price, serviceDetails, duration, photoCount]
+      # 敏感字段（不会返回给 AI）
+      sensitive-fields:
+        - password
+        - openid
+        - token
+        - userId
+  agent:
+    react:
+      enabled: true
+      max-iterations: 6
+      max-same-call-retries: 1
+
+mybatis-plus:
+  global-config:
+    db-config:
+      id-type: auto
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+server:
+  port: 8099
+  address: 0.0.0.0  # 允许所有IP访问
+
+jwt:
+
+  admin-secret-key: ${JWT_ADMIN_SECRET_KEY:change-me-admin-secret-key}
+
+  admin-ttl: 7200000
+
+  admin-token-name: ADMINTOKEN
+
+  user-secret-key: ${JWT_USER_SECRET_KEY:change-me-user-secret-key}
+
+  user-ttl: 7200000
+
+  user-token-name: authentication
+
+
+
+logging:
+  level:
+    org.springframework.data.redis: debug
+    com:
+      photo:
+        mapper: debug
+        service: info
+        controller: info
+      org.springframework.web.socket: DEBUG
+      org.apache.tomcat: DEBUG
+  file:
+    name: logs/photobooker.log
+    max-size: 10MB
+    max-history: 30
+  pattern:
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# 在现有配置基础上添加心跳配置
+websocket:
+  heartbeat:
+    interval: 30    # 心跳间隔（秒）
+    timeout: 60     # 心跳超时（秒）
+    check-interval: 30  # 检查间隔（秒）
+
+alipay:
+  app-id: ${ALIPAY_APP_ID:}
+  private-key: ${ALIPAY_PRIVATE_KEY:}
+  public-key: ${ALIPAY_PUBLIC_KEY:}
+  gateway-url: https://openapi-sandbox.dl.alipaydev.com/gateway.do
+  return-url: ${ALIPAY_RETURN_URL:http://localhost:3000/#/payment-success}
+  notify-url: ${ALIPAY_NOTIFY_URL:http://localhost:8099/pay/notify}
+
+cos:
+  secret-id: ${COS_SECRET_ID:}
+  secret-key: ${COS_SECRET_KEY:}
+  region: ${COS_REGION:ap-guangzhou}  # COS地域
+  bucket-name: ${COS_BUCKET_NAME:}  # COS存储桶名称
+  domain: ${COS_DOMAIN:}  # COS访问域名
+
+rag:
+  enabled: true
+  ollama:
+    base-url: http://localhost:11434
+    chat-model: qwen2:1.5b
+    embedding-model: quentinz/bge-large-zh-v1.5
+  qdrant:
+    host: localhost
+    port: 6333
+    collection-name: photobooker_knowledge
+    vector-size: 1024
+  elasticsearch:
+    enabled: false
+    host: 192.168.100.129
+    port: 9200
+    index-name: photobooker_knowledge
+  retrieval:
+    top-k: 5
+    score-threshold: 0.5

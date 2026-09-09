@@ -1,0 +1,238 @@
+# PhotoBooker Agent ReAct 改造 + “2026/08/18 问题-方案”
+
+> 日期：2026-08-18
+> 范围：AI 客服从“单步 Function Calling”升级为“ReAct（原生工具调用循环）”；RAG 召回提升、召回算法优化、Agent 记忆模块仅出方案（本期不实施代码改动）。
+
+## 一、ReAct 实现方案
+
+### 1.1 现状诊断
+
+改造前，`/ai/stream-chat` 走的是 Spring AI 1.0.0-M6 `ChatClient.functions()`：
+
+- **单步 Function Calling**：模型返回 `tool_calls` 后由 Spring AI 在**同一次请求内**自动执行并把结果直接拼进最终回答；
+- **没有推理循环**：不存在“推理 → 行动 → 观察 → 再推理”的多轮循环，模型无法根据工具结果修正下一步调用；
+- **没有审查/反思**：工具结果不做卡死检测、错误重试限制、结果注入隔离；
+- **结果不可控**：一个失败的调用就会让整轮回答质量下降，且无法分步排查。
+
+### 1.2 本次实现结构
+
+保持 Spring AI 1.0.0-M6 不升级，使用其原生能力：`ChatModel.call(Prompt)`、`OpenAiChatOptions.internalToolExecutionEnabled(false)`、`AssistantMessage.getToolCalls()`、`ToolResponseMessage`。
+
+#### 新增 `ReActAgentService`（`agent/react/`）
+
+直接注入 `ChatModel`，驱动循环：
+
+1. 构造 `messages = SystemMessage(AgentSystemPrompt) + 历史消息 + 当前用户消息`；
+2. 以 `OpenAiChatOptions.builder().functions(toolNames).internalToolExecutionEnabled(false).build()` 调用 `chatModel.call(new Prompt(messages, options))`——模型只返回 `tool_calls`，由本服务手动执行；
+3. 若 `AssistantMessage` 无 `tool_calls` → 得到最终答案，循环结束；
+4. 否则把该 assistant 消息（含 tool_calls）加入 `messages`，逐个执行工具，并把 `ToolResponseMessage.ToolResponse(id, name, resultJson)` 追加回 `messages`，进入下一轮；
+5. 最多 `max-iterations`（默认 6）轮。
+
+#### 新增 `AgentToolRegistry`（`agent/`）
+
+显式建立“Spring AI 可见函数名（camelCase，如 `searchPhotographer`、`updateMySelfInfo`）→ `AgentTool` Bean”的映射：
+
+- `AgentTool.getName()` 目前多数是 snake_case（如 `search_photographer`），与模型看到的函数名（Spring AI 函数 Bean 名）不一致，不能简单推导（`updateMySelfInfo` 无法由 `update_myself_info` 推导出大写 S）；
+- 注册表维护 `ALL_TOOL_FUNCTIONS` / `PUBLIC_TOOL_FUNCTIONS` 常量，控制器按登录态取用；
+- 参数用 fastjson 解析；执行异常序列化为 `{"error": ...}` 回填给模型。
+
+#### 防护机制
+
+| 防护 | 规则 |
+| --- | --- |
+| 卡死检测 | 同一工具 + 相同参数连续出现 ≥2 次且前次执行成功 → 判定卡死，停止并返回“无法完成，请补充信息” |
+| 错误重试限制 | 工具抛异常 / 返回 `{"error":...}` / `{"success":false}` / 空结果 → 下一轮提示模型修正参数重试，最多 `max-same-call-retries`（默认 1）次，仍失败则优雅停止 |
+| 最大迭代 | 超过 `max-iterations` → 优雅降级为歉意回答 |
+| 结果注入隔离 | 工具结果以 `<tool_result>` 标签 + “仅作参考数据”提示注入，防止数据内容污染指令（沿用 PromptInjectionGuard 的 XML 边界隔离思路） |
+
+#### 接入改造（替换现有端点）
+
+`AiChatController.processNormalChat` 改为调用 `ReActAgentService`：
+
+- ReAct 循环完成后，把最终答案作为**整体 chunk** 通过现有 `ResponseBodyEmitter` 发送，纯文本 SSE 流协议不变，`AiChatWidget.vue` 前端零改动；
+- 保留：输入清洗 / 注入防护（第 1、2 层）、`postProcessResponse`、输出安全检测（第 3 层）、Redis 历史保存、模型失败时 RAG / Ollama 兜底（`fallbackChat`）；
+- `buildAgentSystemPrompt` 抽出为可复用类 `AgentSystemPrompt`，并追加 ReAct 指令（基于工具观察继续推理、收集足够信息后直接作答、禁止编造）；
+- emitter 超时由 60s 提到 120s（多轮 LLM 调用耗时长）；
+- `SpringAiChatService` 现有方法保留，`streamChat` 仍被 RAG 流水线使用；
+- 配置：`ReActProperties`（`agent.react.*`）+ `application.yml` 新增 `agent.react` 配置段。
+
+#### 测试验证
+
+- `ReActAgentServiceTest`（mock `ChatModel.call(Prompt)` 脚本化响应）：无工具调用直接作答；单工具调用 → 执行 → 结果回填 → 下一轮作答（验证消息序列含 AssistantMessage + ToolResponseMessage）；多步串联（searchPhotographer → searchPackages → checkAvailability → createOrder）依次执行；工具抛异常 → 错误 JSON 回填并继续；同工具同参数重复 → 卡死检测提前停止；失败重试超过上限 → 优雅停止；超过 max-iterations → 优雅降级；禁用开关 → 直接返回暂不可用。
+- `AgentToolRegistryTest`：`ALL_TOOL_FUNCTIONS` / `PUBLIC_TOOL_FUNCTIONS` 中每个函数名都能解析到对应 Bean。
+- `AiChatControllerMockMvcTest`：`/ai/stream-chat` 流式返回最终答案并保存 Redis 历史；严重注入直接拒绝。
+- 手动验证（需本地 DeepSeek、Redis、MySQL）：问“附近 3 公里的摄影师”“乌萨奇写真约拍”，以及完整下单流程，确认多轮工具调用和最终回答正确。
+
+### 1.3 后续演进
+
+- **结构化事件流**：把“思考/行动/观察”作为 SSE 事件（如 `data: {"type":"tool_call",...}`）下发，前端可展示 Agent 工作过程；
+- **任务进度上报**：长任务（多工具、子代理）分阶段回传 progress / currentStepName；
+- **子代理（Sub-agents）**：复杂任务拆分为多个专业子代理并行/串行执行，主代理汇总；
+- **流式 ReAct**：改用 `chatModel.stream(Prompt)` 驱动，让首字延迟更低、过程可见。
+
+---
+
+## 二、RAG 召回准确度与降噪
+
+### 2.1 问题
+
+当前 RAG 流水线（`RagPipelineService` → `QueryRewriteService` → `MultiPathRecallService` → `RerankService` → LLM）存在：
+
+- 简单按固定长度切分，跨段语义被截断，噪声段落多；
+- 元数据（title/tags/style/location）未参与召回排序；
+- 查询改写依赖单一 LLM 规则，长尾表述召回不全；
+- 仅向量召回（bge-large-zh-v1.5 + Qdrant），无词法/稀疏召回互补；
+- 无重排（或重排模型弱），top-k 与阈值固定，上下文 token 超预算；
+- 无评估集与噪音指标，无法量化“召回准确度”。
+
+### 2.2 方案
+
+#### 1）切分与元数据优化
+
+- **语义段落切分**：按 Markdown 标题、换行、话题边界切分，而非固定字符数；段落级 chunk 重叠 10%~20%；
+- **元数据保留**：每个 chunk 携带 `title`、`tags`、`style`、`location`、`photographerId`、`source`、`createdAt`，供过滤与展示；
+- **摘要索引**：为长文档生成摘要并单独建索引，召回摘要后按需拉取原文；
+- **去重与清洗**：剔除空白、重复、低信息量段落，控制索引膨胀。
+
+#### 2）查询改写增强
+
+- 由 DeepSeek 执行改写（或“规则 + LLM”两级：先规则补偿，再 LLM 扩展）；
+- **多查询召回（Multi-Query）**：改写出同义/补充/子问题等多个查询，分别召回后合并；
+- 查询意图识别（风格/地点/角色名/价格区间）→ 生成结构化过滤条件，召回前先过滤。
+
+#### 3）混合检索
+
+- **向量 + BM25/ES 双路召回**，用 RRF 或加权线性融合；
+- Qdrant 作为稠密向量主库，ES（`elasticsearch.enabled=true`）或内置 BM25 作为词法路；
+- 双路互补：精确关键词（摄影师姓名、地点、价格）靠词法，语义靠向量。
+
+#### 4）重排（Rerank）
+
+- 引入 **bge-reranker（cross-encoder）** 或更强的 rerank 模型，对召回候选精排；
+- 两阶段：粗排（向量/BM25 top-50）→ 精排（rerank top-5~10）；
+- 重排分数与业务分（评分、订单量、热度）线性融合，避免纯相关性排序偏离业务。
+
+#### 5）动态 top-k 与阈值校准
+
+- 按查询类型动态设置 top-k（精确查询小、模糊查询大）；
+- 阈值（score-threshold）基于真实分布校准，而非固定 0.5/0.7；
+- 上下文按 **token 预算截断**（如 3000 tokens），超出部分截断，并带 `[n] (来源: xxx)` 引用，供模型溯源。
+
+#### 6）黄金评估集与噪音指标
+
+- 建立黄金评估集（50~100 条真实问题 + 人工标注的相关段落/标准答案）；
+- 指标：`recall@k`、`MRR`、`nDCG`；
+- **噪音指标**：上下文有用率（最终答案引用/依赖的段落数 ÷ 注入段落数）、无引用段落占比；
+- 每次切分/改写/检索/重排改动都跑评估集回归，量化提升幅度。
+
+---
+
+## 三、召回算法优化
+
+### 3.1 目标
+
+在“能召回”基础上做到“召回得准、排得对、不重复、贴合业务”。
+
+### 3.2 方案
+
+#### 1）Embedding 模型升级
+
+- 由 bge-large-zh-v1.5 升级为 **bge-m3**（多语言 + 稀疏/稠密/多向量统一）或基于领域数据微调（摄影约拍语料：角色名、风格、场景词）；
+- 升级后重新离线灌库并评估维度变化对 Qdrant `vector-size` 的影响。
+
+#### 2）稀疏 + 稠密融合
+
+- 稠密向量（bge-m3 dense）负责语义；
+- 稀疏表示（SPLADE / BM25 / bge-m3 sparse）负责精确词匹配；
+- 双路分数归一化后按 RRF 或线性加权融合，权重超参通过评估集调优。
+
+#### 3）融合超参调优
+
+- RRF 的 k、线性融合的权重、双路候选池大小均在评估集上网格搜索；
+- 记录各组合的 recall@k / MRR / nDCG 对比表，避免凭感觉调参。
+
+#### 4）两阶段“粗排 → 精排”
+
+- 粗排：向量 + 稀疏融合，召回 top-50；
+- 精排：cross-encoder（bge-reranker）逐对打分，取 top-5~10；
+- 精排阶段可并行批处理，控制延迟。
+
+#### 5）MMR 多样性去重
+
+- 对精排结果做 **MMR（Maximal Marginal Relevance）** 去重，平衡相关性与多样性；
+- 同一摄影师/同源内容最多保留 1~2 条，避免结果扎堆。
+
+#### 6）业务权重混排
+
+- 最终排序 = α × 相关性分数 + β × 业务分（评分、订单量、热度、距离）；
+- 业务分归一化到 [0,1]，α/β 通过 A/B 验证；
+- 支持按用户偏好（风格、地点）做个性化加成。
+
+#### 7）Qdrant HNSW 参数与分数归一化
+
+- 调优 HNSW `m`、`ef_construction`、`ef_search`，平衡召回质量与延迟；
+- 对向量分数做 min-max / softmax 归一化，保证与词法分数可融合；
+- 定期重建索引，避免删除/更新造成的碎片。
+
+#### 8）离线消融与 A/B 验证
+
+- 离线：评估集上逐项消融（去掉稀疏路、去掉重排、去掉 MMR…）量化每项贡献；
+- 在线：按用户/时间片 A/B，观察会话满意度、追问率、上下文有用率。
+
+---
+
+## 四、Agent 记忆模块
+
+### 4.1 目标
+
+让 Agent 记住跨会话的用户偏好与事实，减少重复询问，提升个性化（如“上次约拍喜欢日系风”）。
+
+### 4.2 三层记忆架构
+
+| 层 | 存储 | 内容 | 生命周期 |
+| --- | --- | --- | --- |
+| 短期对话记忆 | Redis（现 `ai:chat:history:*`） | 最近 N 轮对话 | 滑动窗口 + 摘要压缩，1 小时 TTL |
+| 长期事实记忆 | Redis Hash + TTL | 用户偏好 / 风格 / 常用地点 / 宠物名等结构化画像 | 按字段 TTL，可删除 |
+| 语义记忆 | Qdrant 独立 collection | 重要事实的向量化表述（自然语言片段） | 自动沉淀，去重，可删除 |
+
+### 4.3 写入时机
+
+- **关键信息抽取**：对话中显式提到风格、地点、拍摄对象、预算、时间偏好 → 抽取写入长期事实记忆；
+- **行为沉淀**：浏览作品、收藏、下单、评价等行为 → 异步更新画像字段与语义记忆；
+- **摘要压缩**：短期对话超过窗口后，LLM 生成摘要存入短期记忆头部。
+
+### 4.4 读取时机
+
+- **系统提示注入**：把用户画像（风格、常用地点）拼进 `AgentSystemPrompt`，让模型主动利用；
+- **RAG 查询增强**：用画像改写/扩展查询（如用户常拍日系 → 查询补充“日系”）；
+- **ReAct 上下文注入**：ReAct 循环的 system 消息中加入“关于用户你已知道的信息”，减少重复询问；
+- **语义检索**：用户问题命中语义记忆时，作为额外上下文或直接回答。
+
+### 4.5 隐私与清理
+
+- **脱敏**：手机号、地址等敏感字段只存摘要/不落语义向量；
+- **用户可删除**：提供“清除我的记忆”接口，删除 Redis Hash 与 Qdrant 向量；
+- **TTL**：长期记忆按字段设置 TTL，语义记忆定期清理低置信度/过期片段；
+- **写入审计**：记录写入来源（对话/行为），便于追溯与误写修正。
+
+### 4.6 分阶段落地
+
+- **v1（短期记忆 + 简单画像）**：滑动窗口 + 摘要压缩；Redis Hash 存风格/地点/常用摄影师；系统提示注入画像；
+- **v2（语义记忆）**：Qdrant 独立 collection，抽取“重要事实”沉淀，查询时召回；
+- **v3（记忆反思与整理）**：定期让 LLM 反思会话，合并/纠错画像；记忆冲突检测；记忆质量评估。
+
+---
+
+## 附：本期改动文件清单
+
+| 文件 | 说明 |
+| --- | --- |
+| `src/main/java/.../agent/react/ReActAgentService.java` | ReAct 循环核心（新增） |
+| `src/main/java/.../agent/AgentToolRegistry.java` | 工具名显式映射（新增） |
+| `src/main/java/.../agent/AgentSystemPrompt.java` | 系统提示词抽取 + ReAct 指令（新增） |
+| `src/main/java/.../config/ReActProperties.java` | `agent.react.*` 配置（新增） |
+| `src/main/java/.../controller/AiChatController.java` | 接入 ReAct、兜底、超时调整（修改） |
+| `src/main/resources/application.yml` | 新增 `agent.react` 配置段（修改） |
+| `src/test/java/.../agent/react/ReActAgentServiceTest.java` | 循环/防护单测（新增） |
+| `src/test/java/.../agent/AgentToolRegistryTest.java` | 工具映射单测（新增） |
+| `src/test/java/.../controller/AiChatControllerMockMvcTest.java` | 端点流式 + 历史保存测试（新增） |

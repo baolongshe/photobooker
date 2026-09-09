@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>支付成功 - PhotoBooker</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .success-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 40px;
+            width: 90%;
+            max-width: 500px;
+            text-align: center;
+        }
+
+        .success-icon {
+            width: 80px;
+            height: 80px;
+            background: #52c41a;
+            border-radius: 50%;
+            margin: 0 auto 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 40px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 28px;
+        }
+
+        .message {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+
+        .order-info {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            text-align: left;
+        }
+
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding: 5px 0;
+        }
+
+        .info-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .info-item label {
+            font-weight: 500;
+            color: #555;
+        }
+
+        .buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, #1677ff, #4096ff);
+            color: white;
+            border: none;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(22, 119, 255, 0.3);
+        }
+
+        .btn-secondary {
+            background: white;
+            color: #1677ff;
+            border: 2px solid #1677ff;
+        }
+
+        .btn-secondary:hover {
+            background: #1677ff;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(22, 119, 255, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="success-container">
+        <div class="success-icon">✓</div>
+        <h1>支付成功！</h1>
+        <p class="message">
+            您的订单已支付成功，我们会尽快为您安排拍摄服务。<br>
+            如有任何问题，请联系客服。
+        </p>
+        
+        <div class="order-info" id="orderInfo">
+            <div class="info-item">
+                <label>订单号：</label>
+                <span id="orderId">-</span>
+            </div>
+            <div class="info-item">
+                <label>支付金额：</label>
+                <span id="totalAmount">-</span>
+            </div>
+            <div class="info-item">
+                <label>支付时间：</label>
+                <span id="payTime">-</span>
+            </div>
+        </div>
+        
+        <div class="buttons">
+            <a href="/orders" class="btn btn-primary">查看订单</a>
+            <a href="/" class="btn btn-secondary">返回首页</a>
+        </div>
+    </div>
+
+    <script>
+        // 获取URL参数
+        function getUrlParam(name) {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get(name);
+        }
+
+        // 页面加载时显示订单信息
+        window.onload = function() {
+            const orderId = getUrlParam('out_trade_no');
+            const totalAmount = getUrlParam('total_amount');
+            
+            if (orderId) {
+                document.getElementById('orderId').textContent = orderId;
+            }
+            
+            if (totalAmount) {
+                document.getElementById('totalAmount').textContent = '¥' + totalAmount;
+            }
+            
+            // 显示当前时间作为支付时间
+            const now = new Date();
+            const payTime = now.getFullYear() + '-' + 
+                           String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+                           String(now.getDate()).padStart(2, '0') + ' ' + 
+                           String(now.getHours()).padStart(2, '0') + ':' + 
+                           String(now.getMinutes()).padStart(2, '0') + ':' + 
+                           String(now.getSeconds()).padStart(2, '0');
+            document.getElementById('payTime').textContent = payTime;
+        };
+    </script>
+</body>
+</html> 

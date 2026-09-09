@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket 测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .log {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 3px;
+            margin: 10px 0;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        button {
+            padding: 8px 16px;
+            margin: 5px;
+            cursor: pointer;
+        }
+        input {
+            padding: 8px;
+            margin: 5px;
+            width: 300px;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebSocket 连接测试</h1>
+    
+    <div class="test-section">
+        <h2>1. 测试简单端点 (/testws)</h2>
+        <button onclick="testSimpleWs()">连接测试端点</button>
+        <button onclick="closeSimpleWs()">关闭连接</button>
+        <div id="simple-log" class="log"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>2. 测试聊天端点 (/chat)</h2>
+        <input type="text" id="token-input" placeholder="输入JWT token" />
+        <button onclick="testChatWs()">连接聊天端点</button>
+        <button onclick="closeChatWs()">关闭连接</button>
+        <div id="chat-log" class="log"></div>
+    </div>
+
+    <script>
+        let simpleWs = null;
+        let chatWs = null;
+
+        function log(elementId, message) {
+            const logElement = document.getElementById(elementId);
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.innerHTML += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        function testSimpleWs() {
+            if (simpleWs && simpleWs.readyState === WebSocket.OPEN) {
+                log('simple-log', '连接已存在，先关闭');
+                simpleWs.close();
+            }
+
+            log('simple-log', '正在连接到 ws://localhost:8099/testws...');
+            simpleWs = new WebSocket('ws://localhost:8099/testws');
+
+            simpleWs.onopen = function(event) {
+                log('simple-log', '✅ 连接成功！');
+                log('simple-log', '发送测试消息...');
+                simpleWs.send('Hello from browser!');
+            };
+
+            simpleWs.onmessage = function(event) {
+                log('simple-log', `📨 收到消息: ${event.data}`);
+            };
+
+            simpleWs.onclose = function(event) {
+                log('simple-log', `❌ 连接关闭 (代码: ${event.code}, 原因: ${event.reason})`);
+            };
+
+            simpleWs.onerror = function(error) {
+                log('simple-log', `❌ 连接错误: ${error}`);
+            };
+        }
+
+        function closeSimpleWs() {
+            if (simpleWs) {
+                simpleWs.close();
+                log('simple-log', '手动关闭连接');
+            }
+        }
+
+        function testChatWs() {
+            const token = document.getElementById('token-input').value.trim();
+            if (!token) {
+                log('chat-log', '❌ 请输入JWT token');
+                return;
+            }
+
+            if (chatWs && chatWs.readyState === WebSocket.OPEN) {
+                log('chat-log', '连接已存在，先关闭');
+                chatWs.close();
+            }
+
+            const wsUrl = `ws://localhost:8099/chat?token=${encodeURIComponent(token)}`;
+            log('chat-log', `正在连接到 ${wsUrl}...`);
+            chatWs = new WebSocket(wsUrl);
+
+            chatWs.onopen = function(event) {
+                log('chat-log', '✅ 聊天连接成功！');
+                log('chat-log', '发送测试消息...');
+                const testMessage = {
+                    toId: 1,
+                    toRole: 'photographer',
+                    orderId: 1,
+                    sessionId: 'test_session',
+                    type: 'text',
+                    content: '测试消息',
+                    fileUrl: ''
+                };
+                chatWs.send(JSON.stringify(testMessage));
+            };
+
+            chatWs.onmessage = function(event) {
+                log('chat-log', `📨 收到消息: ${event.data}`);
+            };
+
+            chatWs.onclose = function(event) {
+                log('chat-log', `❌ 连接关闭 (代码: ${event.code}, 原因: ${event.reason})`);
+            };
+
+            chatWs.onerror = function(error) {
+                log('chat-log', `❌ 连接错误: ${error}`);
+            };
+        }
+
+        function closeChatWs() {
+            if (chatWs) {
+                chatWs.close();
+                log('chat-log', '手动关闭连接');
+            }
+        }
+    </script>
+</body>
+</html> 

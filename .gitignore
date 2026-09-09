@@ -1,0 +1,64 @@
+HELP.md
+target/
+.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### VS Code ###
+.vscode/
+
+### AI / IDE Tools ###
+.superpowers/
+.claude/
+
+### Local config ###
+src/main/resources/application-local.yml
+src/main/resources/application-prod.yml
+logs/
+*.log
+arthas-output/
+*.hprof
+
+### Frontend (test/) ###
+test/node_modules/
+test/dist/
+test/dist.zip
+
+### OS ###
+.DS_Store
+Thumbs.db
+
+### Python / ML ###
+finetune/
+__pycache__/
+*.pyc
+
+### Misc ###
+sql表.sql
+*.swp
+*.swo

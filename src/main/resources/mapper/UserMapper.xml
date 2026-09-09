@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xhxi.photobooker.mapper.UserMapper">
+
+    <!-- 批量更新：仅更新传入非空的字段 -->
+    <update id="updateBatchSelective" parameterType="java.util.List">
+        <foreach collection="userList" item="user" separator="">
+            update user
+            <set>
+                <!-- 动态判断字段是否非空，非空则更新 -->
+                <if test="user.username != null">username = #{user.username},</if>
+                <if test="user.password != null">password = #{user.password},</if>
+                <if test="user.realName != null">realName = #{user.realName},</if>
+                <if test="user.phone != null">phone = #{user.phone},</if>
+                <if test="user.gender != null">gender = #{user.gender},</if>
+                <if test="user.birthday != null">birthday = #{user.birthday},</if>
+                <if test="user.avatar != null">avatar = #{user.avatar},</if>
+                <if test="user.status != null">status = #{user.status},</if>
+                <if test="user.role != null">role = #{user.role},</if>
+                <if test="user.openid != null">openid = #{user.openid},</if>
+            </set>
+            where id = #{user.id};
+        </foreach>
+    </update>
+
+    <update id="updateUser" parameterType="com.xhxi.photobooker.entity.User"> <!-- 替换为实际实体全路径 -->
+        UPDATE user
+        <set>
+            <!-- 动态判断字段是否非空，非空则更新 -->
+            <if test="username != null">username = #{username},</if>
+            <if test="password != null">password = #{password},</if>
+            <if test="realName != null">real_name = #{realName},</if>
+            <if test="phone != null">phone = #{phone},</if>
+            <if test="gender != null">gender = #{gender},</if>
+            <if test="birthday != null">birthday = #{birthday},</if>
+            <if test="avatar != null">avatar = #{avatar},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="role != null">role = #{role},</if>
+            <if test="openid != null">openid = #{openid},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+</mapper>

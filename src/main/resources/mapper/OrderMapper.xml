@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xhxi.photobooker.mapper.OrderMapper">
+
+    <select id="selectByUserId" resultType="com.xhxi.photobooker.entity.Order">
+        SELECT * FROM booking_order
+        WHERE user_id = #{user_id}
+        ORDER BY create_time DESC
+    </select>
+
+    <select id="selectOrderByPhotographerId" resultType="com.xhxi.photobooker.entity.Order">
+        SELECT
+            o.*,
+            pk.name AS packageName
+        FROM booking_order o
+        LEFT JOIN photographer_package pk ON o.package_name = pk.name
+        WHERE o.photographer_id = #{photographer_id}
+        ORDER BY o.shooting_time ASC
+    </select>
+
+    <select id="countCompletedOrdersByPhotographerId" resultType="java.lang.Integer">
+        SELECT COUNT(*) FROM booking_order
+        WHERE photographer_id = #{photographer_id}
+        AND status = 'COMPLETED'
+    </select>
+
+</mapper>

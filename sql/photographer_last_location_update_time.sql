@@ -1,0 +1,1 @@
+ALTER TABLE photographer ADD COLUMN last_location_update_time DATETIME NULL COMMENT '最后定位上传时间'; 

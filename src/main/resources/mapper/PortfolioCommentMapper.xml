@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xhxi.photobooker.mapper.PortfolioCommentMapper">
+    <select id="selectByPortfolioId" resultType="com.xhxi.photobooker.entity.PortfolioComment">
+        SELECT * FROM portfolio_comment
+        WHERE portfolio_id = #{portfolioId} AND status = 0
+        ORDER BY create_time ASC
+        LIMIT #{offset}, #{size}
+    </select>
+    <select id="countByPortfolioId" resultType="int">
+        SELECT COUNT(*) FROM portfolio_comment WHERE portfolio_id = #{portfolioId} AND status = 0
+    </select>
+</mapper> 
