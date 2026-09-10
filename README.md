@@ -1,5 +1,6 @@
 # 摄影预约智能系统 - AI Agent模块
-   已创建本项目的通用ReAct循环，开箱即可使用，只需在 pom.xml 中添加依赖，实现 AgentTool 接口定义自己的工具，Spring Boot 会自动装配整个 ReAct 循环。 项目链接：https://github.com/baolongshe/react-agent-spring-boot-starter.git
+>   已创建本项目的通用ReAct循环，开箱即可使用，只需在 pom.xml 中添加依赖，实现 AgentTool 接口定义自己的工具，Spring Boot 会自
+> 动装配整个 ReAct 循环。 项目链接：https://github.com/baolongshe/react-agent-spring-boot-starter.git
    
 > 基于 SpringBoot + Spring AI + Vue3，实现基于 ReAct(Reason+Act) 架构的AI智能预约Agent。
 > 本Agent复用SpringAI工具元注册、JSON Schema生成、ToolCall协议解析，关闭框架内置自动工具循环，自研ReAct多轮推理调度。
